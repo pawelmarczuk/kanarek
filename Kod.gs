@@ -29,6 +29,7 @@ var ORANGE = "orange"
 var GREEN = "green"
 
 var DAYS_FOR_NOTIFICATION = 3
+var DAYS_FOR_GREENCARD_TO_CHECK_IN_PAST = 7
 
 var TEST = true
 var WRITE = true
@@ -56,7 +57,7 @@ function runTestOneRow() {
   TEST = true
   WRITE = false
 
-  var row = 4;
+  var row = 1;
 
   var summary = getSummaryData()
   var saveData = getSaveData(summary.length)
@@ -112,6 +113,12 @@ function checkRow(rowSummary, rowSave, id) {
     var save = rowSave.term_oragne[c]
     checkOrangeCard(orange, save, id, c)
   }
+  //green
+  for (var c = 0; c < rowSummary.notification.length; c++) {
+    var green = rowSummary.notification[c]
+    var save = rowSave.term_green[c]
+    checkGreenCard(green, rowSummary.term_to_fix[c], save, id, c)
+  }
   checkMoreThreeCard(rowSummary.three_yellow, rowSave.three_yellow, id)
 }
 
@@ -144,6 +151,25 @@ function checkOrangeCard(actual, saveData, id, idCard) {
     if (diffTime >= 0 && diffTime <= DAYS_FOR_NOTIFICATION) {
       if (sendMailForOrangeCard(id, idCard, term_plan)) {
         saveOrangeCard(id, idCard)
+      }
+    }
+  }
+}
+
+function checkGreenCard(actual, last_plan_term, saveData, id, idCard) {
+  var term_plan = actual[0]
+  var term_real = actual[1]
+
+  if (
+    typeof term_real.getMonth === 'function' && typeof saveData.getMonth !== 'function'
+  ) {
+    var diffTime = calcDiffTimeInDays(term_real, last_plan_term)
+    if (diffTime >= 0) {
+      var diffTimeToCurrentDate = calcDiffTimeInDays(term_real, new Date())
+      if (diffTimeToCurrentDate >= 0 && diffTimeToCurrentDate <= DAYS_FOR_GREENCARD_TO_CHECK_IN_PAST) {
+        if (sendMailForGreenCard(id, idCard)) {
+          saveGreenCard(id, idCard)
+        }
       }
     }
   }
@@ -198,6 +224,13 @@ function saveOrangeCard(id, idCard) {
   console.log("save orange " + id + " " + (idCard + 1))
   if (WRITE) {
     saveValue('stan kartek', getLocationForCard(id, idCard, ORANGE), new Date())
+  }
+}
+
+function saveGreenCard(id, idCard) {
+  console.log("save green " + id + " " + (idCard + 1))
+  if (WRITE) {
+    saveValue('stan kartek', getLocationForCard(id, idCard, GREEN), new Date())
   }
 }
 
@@ -291,7 +324,7 @@ function sendMailForOrangeCard(id, idCard, termPlan) {
   var checkPointName = CHECKPOINT_TITLE[level]
   var tp = Utilities.formatDate(termPlan, "GMT+1", "yyyy-MM-dd");
 
-  var subject = "HAZ 2023 " + mailData.komendant + "/" + mailData.kwatermitrz + " [żółta kartka - termin nr " + level + "]"
+  var subject = "HAZ 2023 " + mailData.komendant + "/" + mailData.kwatermitrz + " [przypomnienie - termin nr " + level + "]"
   var message = getMessageForOrange(SETTINGS_MAIL_ORANGE_GRANT, mailData.komendant, mailData.kwatermitrz, checkPointName, tp)
 
   if (message != "") {
@@ -301,6 +334,25 @@ function sendMailForOrangeCard(id, idCard, termPlan) {
   } else {
     console.error("pusta wiadomość")
     internalLog([new Date(), id, "BŁĄD", colorToText(ORANGE), (idCard + 1), "", ""])
+    return false
+  }
+}
+
+function sendMailForGreenCard(id, idCard) {
+  var level = idCard + 1;
+  var mailData = getMailData(id)
+  var checkPointName = CHECKPOINT_TITLE[level]
+
+  var subject = "HAZ 2023 " + mailData.komendant + "/" + mailData.kwatermitrz + " [zielona kartka - termin nr " + level + "]"
+  var message = getMessageForGreen(SETTINGS_MAIL_GREEN_GRANT, mailData.komendant, mailData.kwatermitrz, checkPointName)
+
+  if (message != "") {
+    sendMail(mailData.recipeint, subject, message)
+    internalLog([new Date(), id, "przyznanie", colorToText(GREEN), (idCard + 1), message, mailData.recipeint])
+    return true
+  } else {
+    console.error("pusta wiadomość")
+    internalLog([new Date(), id, "BŁĄD", colorToText(GREEN), (idCard + 1), "", ""])
     return false
   }
 }
@@ -473,6 +525,10 @@ function getMessageForYellow(settings, kom, kwa, numberYellowCard, checkPointNam
 
 function getMessageForOrange(settings, kom, kwa, checkPointName, termPlan) {
   return SETTINGS[settings][0].replace("$kom", kom).replace("$kwa", kwa).replace("$checkPointName", checkPointName).replace("$date", termPlan);
+}
+
+function getMessageForGreen(settings, kom, kwa, checkPointName) {
+  return SETTINGS[settings][0].replace("$kom", kom).replace("$kwa", kwa).replace("$checkPointName", checkPointName)
 }
 
 function getMessage(settings, kom, kwa) {
