@@ -11,6 +11,8 @@ var SETTINGS_CHECKPOINT_TITLE_3 = 9
 var SETTINGS_CHECKPOINT_TITLE_4 = 10
 var SETTINGS_CHECKPOINT_TITLE_5 = 11
 var SETTINGS_DEFAULT_MAIL = 12
+var SETTINGS_MAIL_ORANGE_GRANT = 13
+var SETTINGS_MAIL_GREEN_GRANT = 14
 
 var CHECKPOINT_TITLE = [
   "",
@@ -23,6 +25,10 @@ var CHECKPOINT_TITLE = [
 
 var YELLOW = "yellow"
 var RED = "red"
+var ORANGE = "orange"
+var GREEN = "green"
+
+var DAYS_FOR_NOTIFICATION = 3
 
 var TEST = true
 var WRITE = true
@@ -46,6 +52,22 @@ function runTest() {
   main()
 }
 
+function runTestOneRow() {
+  TEST = true
+  WRITE = false
+
+  var row = 4;
+
+  var summary = getSummaryData()
+  var saveData = getSaveData(summary.length)
+
+  var rowSummary = summary[row];
+  var rowSave = saveData[row];
+  var id = rowSummary.id
+
+  checkRow(rowSummary, rowSave, id)
+}
+
 function main() {
   var summary = getSummaryData()
   var saveData = getSaveData(summary.length)
@@ -56,7 +78,6 @@ function main() {
   }
 
   for (var i = 0; i < summary.length; i++) {
-
     var rowSummary = summary[i];
     var rowSave = saveData[i];
     var id = rowSummary.id
@@ -70,19 +91,28 @@ function main() {
       console.error("ID is not a number")
       continue
     }
-
-    for (var c = 0; c < rowSummary.term_yellow.length; c++) {
-      var yellow = rowSummary.term_yellow[c]
-      var saveYellow = rowSave.term_yellow[c]
-      checkCard(yellow, saveYellow, id, c, YELLOW, rowSummary.three_yellow, rowSummary.term_to_fix[c])
-    }
-    for (var c = 0; c < rowSummary.term_red.length; c++) {
-      var red = rowSummary.term_red[c]
-      var saveRed = rowSave.term_red[c]
-      checkCard(red, saveRed, id, c, RED, rowSummary.three_yellow, null)
-    }
-    checkMoreThreeCard(rowSummary.three_yellow, rowSave.three_yellow, id)
+    checkRow(rowSummary, rowSave, id)
   }
+}
+
+function checkRow(rowSummary, rowSave, id) {
+  for (var c = 0; c < rowSummary.term_yellow.length; c++) {
+    var yellow = rowSummary.term_yellow[c]
+    var saveYellow = rowSave.term_yellow[c]
+    checkCard(yellow, saveYellow, id, c, YELLOW, rowSummary.three_yellow, rowSummary.term_to_fix[c])
+  }
+  for (var c = 0; c < rowSummary.term_red.length; c++) {
+    var red = rowSummary.term_red[c]
+    var saveRed = rowSave.term_red[c]
+    checkCard(red, saveRed, id, c, RED, rowSummary.three_yellow, null)
+  }
+  //notification
+  for (var c = 0; c < rowSummary.notification.length; c++) {
+    var orange = rowSummary.notification[c]
+    var save = rowSave.term_oragne[c]
+    checkOrangeCard(orange, save, id, c)
+  }
+  checkMoreThreeCard(rowSummary.three_yellow, rowSave.three_yellow, id)
 }
 
 function checkCard(actual, saveData, id, idCard, color, numberYellowCard, dayToFix) {
@@ -100,6 +130,38 @@ function checkCard(actual, saveData, id, idCard, color, numberYellowCard, dayToF
       sendMailForTakeBack(id, idCard, color)
     }
   }
+}
+
+function checkOrangeCard(actual, saveData, id, idCard) {
+  var term_plan = actual[0]
+  var term_real = actual[1]
+
+  if (
+    term_real == "" && typeof saveData.getMonth !== 'function'
+  ) {
+    //check if there is X dat to send notification
+    var diffTime = calcDiffTimeInDays(new Date(), term_plan)
+    if (diffTime >= 0 && diffTime <= DAYS_FOR_NOTIFICATION) {
+      if (sendMailForOrangeCard(id, idCard, term_plan)) {
+        saveOrangeCard(id, idCard)
+      }
+    }
+  }
+}
+
+function calcDiffTimeInDays(term1, term2) {
+  var before = createnewDateWithoutHours(term1)
+  var after = createnewDateWithoutHours(term2)
+  let difference = after.getTime() - before.getTime();
+  return Math.ceil(difference / (1000 * 3600 * 24));
+}
+
+function createnewDateWithoutHours(original) {
+  var date = new Date(original)
+  date.setHours(0)
+  date.setMinutes(0)
+  date.setSeconds(0)
+  return date;
 }
 
 function checkMoreThreeCard(actual, saveData, id) {
@@ -132,6 +194,13 @@ function saveRedCard(id) {
   }
 }
 
+function saveOrangeCard(id, idCard) {
+  console.log("save orange " + id + " " + (idCard + 1))
+  if (WRITE) {
+    saveValue('stan kartek', getLocationForCard(id, idCard, ORANGE), new Date())
+  }
+}
+
 function deleteCard(id, idCard, color) {
   console.log("delete " + color + " " + id + " " + (idCard + 1))
   if (WRITE) {
@@ -151,6 +220,10 @@ function getLocationForCard(id, idCard, color) {
     return intToChar(idCard + 1) + (id + 1)
   } else if (color == RED) {
     return intToChar(idCard + 6) + (id + 1)
+  } else if (color == ORANGE) {
+    return intToChar(idCard + 12) + (id + 1)
+  } else if (color == GREEN) {
+    return intToChar(idCard + 17) + (id + 1)
   } else {
     return -1
   }
@@ -212,11 +285,35 @@ function sendMailForTakeBackRed(id, idCard) {
   internalLog([new Date(), id, "przyznanie", colorToText(RED), (idCard + 1), message, mailData.recipeint])
 }
 
+function sendMailForOrangeCard(id, idCard, termPlan) {
+  var level = idCard + 1;
+  var mailData = getMailData(id)
+  var checkPointName = CHECKPOINT_TITLE[level]
+  var tp = Utilities.formatDate(termPlan, "GMT+1", "yyyy-MM-dd");
+
+  var subject = "HAZ 2023 " + mailData.komendant + "/" + mailData.kwatermitrz + " [żółta kartka - termin nr " + level + "]"
+  var message = getMessageForOrange(SETTINGS_MAIL_ORANGE_GRANT, mailData.komendant, mailData.kwatermitrz, checkPointName, tp)
+
+  if (message != "") {
+    sendMail(mailData.recipeint, subject, message)
+    internalLog([new Date(), id, "przyznanie", colorToText(ORANGE), (idCard + 1), message, mailData.recipeint])
+    return true
+  } else {
+    console.error("pusta wiadomość")
+    internalLog([new Date(), id, "BŁĄD", colorToText(ORANGE), (idCard + 1), "", ""])
+    return false
+  }
+}
+
 function colorToText(color) {
   if (color == YELLOW) {
     return "żółta"
   } else if (color == RED) {
     return "czerwona"
+  } else if (color == ORANGE) {
+    return "pomarańczowa"
+  } else if (color == GREEN) {
+    return "zielona"
   } else {
     ""
   }
@@ -260,6 +357,17 @@ function getSummaryData() {
   var fix4 = charToInt("AP")
   var fix5 = charToInt("AP")
 
+  var noti1A = charToInt("Z")
+  var noti1B = charToInt("AA")
+  var noti2A = charToInt("AD")
+  var noti2B = charToInt("AE")
+  var noti3A = charToInt("AH")
+  var noti3B = charToInt("AI")
+  var noti4A = charToInt("AL")
+  var noti4B = charToInt("AM")
+  var noti5A = charToInt("AP")
+  var noti5B = charToInt("AQ")
+
   var threeYellow = charToInt("AT")
 
   for (var i = 0; i < data.length; i++) {
@@ -274,6 +382,13 @@ function getSummaryData() {
       term_red: [dataRow[red1], dataRow[red2], dataRow[red3], dataRow[red4], dataRow[red5]],
       three_yellow: dataRow[threeYellow],
       term_to_fix: [dataRow[fix1], dataRow[fix2], dataRow[fix3], dataRow[fix4], dataRow[fix5]],
+      notification: [
+        [dataRow[noti1A], dataRow[noti1B]],
+        [dataRow[noti2A], dataRow[noti2B]],
+        [dataRow[noti3A], dataRow[noti3B]],
+        [dataRow[noti4A], dataRow[noti4B]],
+        [dataRow[noti5A], dataRow[noti5B]],
+      ]
     }
     output.push(row)
   }
@@ -295,14 +410,28 @@ function getSaveData(rowsLength) {
 
   var threeYellow = charToInt("L")
 
-  var data = getData("stan kartek", "A2:L" + (rowsLength + 1));
+  var oragne1 = charToInt("M")
+  var oragne2 = charToInt("N")
+  var oragne3 = charToInt("O")
+  var oragne4 = charToInt("P")
+  var oragne5 = charToInt("Q")
+
+  var green1 = charToInt("R")
+  var green2 = charToInt("S")
+  var green3 = charToInt("T")
+  var green4 = charToInt("U")
+  var green5 = charToInt("V")
+
+  var data = getData("stan kartek", "A2:V" + (rowsLength + 1));
   var output = []
   for (var i = 0; i < data.length; i++) {
     var dataRow = data[i]
     var row = {
       term_yellow: [dataRow[yellow1], dataRow[yellow2], dataRow[yellow3], dataRow[yellow4], dataRow[yellow5]],
       term_red: [dataRow[red1], dataRow[red2], dataRow[red3], dataRow[red4], dataRow[red5]],
-      three_yellow: dataRow[threeYellow]
+      three_yellow: dataRow[threeYellow],
+      term_oragne: [dataRow[oragne1], dataRow[oragne2], dataRow[oragne3], dataRow[oragne4], dataRow[oragne5]],
+      term_green: [dataRow[green1], dataRow[green2], dataRow[green3], dataRow[green4], dataRow[green5]]
     }
     output.push(row)
   }
@@ -340,6 +469,10 @@ function getRecipients(dataToReceipient) {
 
 function getMessageForYellow(settings, kom, kwa, numberYellowCard, checkPointName, dayToFix) {
   return SETTINGS[settings][0].replace("$kom", kom).replace("$kwa", kwa).replace("$allYellowCard", numberYellowCard).replace("$checkPointName", checkPointName).replace("$dayToFix", dayToFix);
+}
+
+function getMessageForOrange(settings, kom, kwa, checkPointName, termPlan) {
+  return SETTINGS[settings][0].replace("$kom", kom).replace("$kwa", kwa).replace("$checkPointName", checkPointName).replace("$date", termPlan);
 }
 
 function getMessage(settings, kom, kwa) {

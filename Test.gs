@@ -81,3 +81,9 @@ function testSummary() {
   var data = getData("Dane", "A3:5")
   console.log(data)
 }
+
+
+function testCalcDiffTimeInDays() {
+  Logger.log(calcDiffTimeInDays(new Date(2022, 12, 17, 8, 0, 0), new Date(2022, 12, 20, 7, 0, 0)))
+  Logger.log(calcDiffTimeInDays(new Date(2022, 12, 17, 8, 0, 0), new Date(2022, 12, 20, 9, 0, 0)))
+}
